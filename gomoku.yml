@@ -1,174 +1,231 @@
 gomoku_game:
-  # 🧠 Pseudocode with full logic including AI and save/load
-  pseudocode: |
-    1. Initialize game:
-       a. Create 15x15 board
-       b. Set current player to 'X'
-       c. Ask if opponent is AI or human
-       d. Set game_over = False
-    2. While game is not over:
-       a. Display board
-       b. If current player is AI:
-            - Generate move automatically
-          Else:
-            - Prompt user for move
-       c. Validate and apply move
-       d. Check for win
-       e. Check for draw
-       f. If game continues, switch player
-       g. Optionally, save game to file
-    3. After game ends, display winner or draw
+  description: "Full Gomoku game design with pseudocode, implementation, flowchart, and JSON state."
 
-  # 🐍 Full Python code with play loop, AI, save/load
-  python_code: |
-    import json
-    import random
-    import os
+  # 🧠 Pseudocode Logic
+  pseudocode:
+    description: "Step-by-step logic including AI, save/load, and undo."
+    steps:
+      - Initialize game:
+          actions:
+            - Create a 15x15 empty board
+            - Set current player to 'X'
+            - Ask for opponent type (Human or AI)
+            - Set game_over to False
+            - Initialize move_history list
+      - Main game loop:
+          actions:
+            - Display the board
+            - Prompt player (or AI) for action:
+                - Move
+                - Undo
+                - Save
+                - Load
+            - If move:
+                - Validate
+                - If valid:
+                    - Apply move
+                    - Add to move_history
+                    - Check win
+                    - Check draw
+                    - If not over → switch player
+                - If invalid: retry
+            - If undo:
+                - Revert last move
+                - Switch player back
+            - If save:
+                - Save state to JSON file
+            - If load:
+                - Load state from JSON file
+      - End game:
+          actions:
+            - Announce winner or draw
+            - Offer restart or exit
 
-    class Gomoku:
-        SIZE = 15
+  # 🐍 Python Code Implementation
+  python_code:
+    description: "Python implementation of Gomoku with save/load, AI, and undo features."
+    snippet: |
+      import json
+      import random
 
-        def __init__(self, vs_ai=False):
-            self.board = [[' ' for _ in range(self.SIZE)] for _ in range(self.SIZE)]
-            self.current_player = 'X'
-            self.game_over = False
-            self.winner = None
-            self.vs_ai = vs_ai
+      class Gomoku:
+          SIZE = 15
 
-        def display_board(self):
-            print("   " + " ".join(f"{i:2}" for i in range(self.SIZE)))
-            for i, row in enumerate(self.board):
-                print(f"{i:2} " + " ".join(row))
-            print()
+          def __init__(self, vs_ai=False):
+              self.board = [[' ' for _ in range(self.SIZE)] for _ in range(self.SIZE)]
+              self.current_player = 'X'
+              self.game_over = False
+              self.winner = None
+              self.vs_ai = vs_ai
+              self.move_history = []
 
-        def is_valid_move(self, row, col):
-            return 0 <= row < self.SIZE and 0 <= col < self.SIZE and self.board[row][col] == ' '
+          def display_board(self):
+              print("  " + " ".join([f"{i:2}" for i in range(self.SIZE)]))
+              for i, row in enumerate(self.board):
+                  print(f"{i:2} " + " ".join(row))
 
-        def make_move(self, row, col):
-            if self.is_valid_move(row, col):
-                self.board[row][col] = self.current_player
-                return True
-            return False
+          def is_valid_move(self, x, y):
+              return 0 <= x < self.SIZE and 0 <= y < self.SIZE and self.board[x][y] == ' '
 
-        def check_win(self, row, col):
-            directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
-            for dx, dy in directions:
-                count = 1
-                count += self._count_direction(row, col, dx, dy)
-                count += self._count_direction(row, col, -dx, -dy)
-                if count >= 5:
-                    self.game_over = True
-                    self.winner = self.current_player
-                    return True
-            return False
+          def make_move(self, x, y):
+              if self.is_valid_move(x, y):
+                  self.board[x][y] = self.current_player
+                  self.move_history.append((x, y))
+                  return True
+              return False
 
-        def _count_direction(self, row, col, dx, dy):
-            count = 0
-            x, y = row + dx, col + dy
-            while 0 <= x < self.SIZE and 0 <= y < self.SIZE and self.board[x][y] == self.current_player:
-                count += 1
-                x += dx
-                y += dy
-            return count
+          def undo_move(self):
+              if self.move_history:
+                  x, y = self.move_history.pop()
+                  self.board[x][y] = ' '
+                  self.switch_player()
+                  print("Last move undone.")
+              else:
+                  print("No moves to undo.")
 
-        def check_draw(self):
-            if all(cell != ' ' for row in self.board for cell in row):
-                self.game_over = True
-                return True
-            return False
+          def switch_player(self):
+              self.current_player = 'O' if self.current_player == 'X' else 'X'
 
-        def switch_player(self):
-            self.current_player = 'O' if self.current_player == 'X' else 'X'
+          def check_win(self):
+              directions = [(1,0), (0,1), (1,1), (1,-1)]
+              for x in range(self.SIZE):
+                  for y in range(self.SIZE):
+                      if self.board[x][y] == self.current_player:
+                          for dx, dy in directions:
+                              if self.count_stones(x, y, dx, dy) >= 5:
+                                  self.winner = self.current_player
+                                  self.game_over = True
+                                  return True
+              return False
 
-        def get_ai_move(self):
-            available = [(r, c) for r in range(self.SIZE) for c in range(self.SIZE) if self.board[r][c] == ' ']
-            return random.choice(available) if available else (0, 0)
+          def count_stones(self, x, y, dx, dy):
+              count = 0
+              for i in range(5):
+                  nx, ny = x + dx*i, y + dy*i
+                  if 0 <= nx < self.SIZE and 0 <= ny < self.SIZE and self.board[nx][ny] == self.current_player:
+                      count += 1
+                  else:
+                      break
+              return count
 
-        def save_game(self, filename="gomoku_save.json"):
-            state = {
-                "board": self.board,
-                "current_player": self.current_player,
-                "game_over": self.game_over,
-                "winner": self.winner
-            }
-            with open(filename, "w") as f:
-                json.dump(state, f)
+          def is_draw(self):
+              for row in self.board:
+                  if ' ' in row:
+                      return False
+              self.game_over = True
+              return True
 
-        def load_game(self, filename="gomoku_save.json"):
-            if os.path.exists(filename):
-                with open(filename, "r") as f:
-                    state = json.load(f)
-                    self.board = state["board"]
-                    self.current_player = state["current_player"]
-                    self.game_over = state["game_over"]
-                    self.winner = state["winner"]
+          def save_game(self, filename="gomoku_save.json"):
+              state = {
+                  "board": self.board,
+                  "current_player": self.current_player,
+                  "game_over": self.game_over,
+                  "winner": self.winner,
+                  "move_history": self.move_history,
+                  "vs_ai": self.vs_ai
+              }
+              with open(filename, 'w') as f:
+                  json.dump(state, f)
+              print("Game saved.")
 
-        def play(self):
-            print("Welcome to Gomoku!")
-            while not self.game_over:
-                self.display_board()
-                if self.vs_ai and self.current_player == 'O':
-                    print("AI is thinking...")
-                    row, col = self.get_ai_move()
-                else:
-                    try:
-                        move = input(f"Player {self.current_player}, enter row,col (or 'save' to save): ")
-                        if move.lower() == 'save':
-                            self.save_game()
-                            print("Game saved.")
-                            continue
-                        row, col = map(int, move.strip().split(','))
-                    except:
-                        print("Invalid input. Try again.")
-                        continue
+          def load_game(self, filename="gomoku_save.json"):
+              with open(filename, 'r') as f:
+                  state = json.load(f)
+              self.board = state["board"]
+              self.current_player = state["current_player"]
+              self.game_over = state["game_over"]
+              self.winner = state["winner"]
+              self.move_history = state["move_history"]
+              self.vs_ai = state["vs_ai"]
+              print("Game loaded.")
 
-                if not self.make_move(row, col):
-                    print("Invalid move. Try again.")
-                    continue
+          def ai_move(self):
+              empty_cells = [(x, y) for x in range(self.SIZE) for y in range(self.SIZE) if self.board[x][y] == ' ']
+              return random.choice(empty_cells)
 
-                if self.check_win(row, col):
-                    self.display_board()
-                    print(f"🎉 Player {self.current_player} wins!")
-                elif self.check_draw():
-                    self.display_board()
-                    print("🤝 It's a draw!")
-                else:
-                    self.switch_player()
+          def play(self):
+              while not self.game_over:
+                  self.display_board()
+                  print(f"Player {self.current_player}'s turn.")
+                  if self.vs_ai and self.current_player == 'O':
+                      x, y = self.ai_move()
+                      print(f"AI chooses: {x}, {y}")
+                  else:
+                      action = input("Enter move x y, or 'undo', 'save', 'load': ").strip().lower()
+                      if action == 'undo':
+                          self.undo_move()
+                          continue
+                      elif action == 'save':
+                          self.save_game()
+                          continue
+                      elif action == 'load':
+                          self.load_game()
+                          continue
+                      try:
+                          x, y = map(int, action.split())
+                      except:
+                          print("Invalid input.")
+                          continue
 
-  # 🔁 Flowchart with AI and save logic
-  flowchart: |
-    graph TD
-      Start[Start Game] --> Init[Initialize Game State]
-      Init --> Opponent[Choose Opponent Type]
-      Opponent --> Loop[Main Game Loop]
-      Loop --> ShowBoard[Display Board]
-      ShowBoard --> PlayerType{Is Current Player AI?}
-      PlayerType -- Yes --> AIMove[Generate AI Move]
-      PlayerType -- No --> GetMove[Prompt Human Move]
-      GetMove --> SaveCheck{Save Game?}
-      SaveCheck -- Yes --> SaveGame[Save to File] --> Loop
-      SaveCheck -- No --> Validate
-      AIMove --> Validate[Validate and Apply Move]
-      Validate -- Invalid --> Loop
-      Validate -- Valid --> CheckWin[Check Win]
-      CheckWin -- Yes --> EndWin[Declare Winner]
-      CheckWin -- No --> CheckDraw[Check Draw]
-      CheckDraw -- Yes --> EndDraw[Declare Draw]
-      CheckDraw -- No --> Switch[Switch Player] --> Loop
-      EndWin & EndDraw --> End[Game Over]
+                  if self.make_move(x, y):
+                      if self.check_win():
+                          self.display_board()
+                          print(f"Player {self.current_player} wins!")
+                          break
+                      elif self.is_draw():
+                          self.display_board()
+                          print("It's a draw!")
+                          break
+                      self.switch_player()
+                  else:
+                      print("Invalid move.")
 
-  # 🧾 Sample JSON game state (after few moves)
-  json_example: |
-    {
-      "board": [
-        [" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
-        [" ", "X", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
-        [" ", "O", "X", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
-        [" ", " ", " ", "O", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
-        ...,
-        [" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "]
-      ],
-      "current_player": "X",
-      "game_over": false,
-      "winner": null
-    }
+      if __name__ == "__main__":
+          mode = input("Play vs AI? (y/n): ").lower().startswith('y')
+          game = Gomoku(vs_ai=mode)
+          game.play()
+
+  # 🔁 Flowchart (Mermaid Syntax)
+  flowchart:
+    description: "Game flow including AI, undo, and save/load logic."
+    diagram: |
+      graph TD
+        Start[Start Game] --> Init[Initialize Game]
+        Init --> Opponent[Choose Opponent Type]
+        Opponent --> Loop[Main Game Loop]
+        Loop --> Board[Display Board]
+        Board --> Action{Choose Action}
+        Action -- Move --> GetMove[Get Move Input]
+        Action -- Undo --> UndoMove[Undo Last Move] --> Loop
+        Action -- Save --> SaveGame[Save Game to File] --> Loop
+        Action -- Load --> LoadGame[Load Game from File] --> Loop
+        GetMove --> Validate[Validate Move]
+        Validate -- Invalid --> Loop
+        Validate -- Valid --> ApplyMove[Apply Move]
+        ApplyMove --> CheckWin[Check Win]
+        CheckWin -- Yes --> EndWin[Declare Winner]
+        CheckWin -- No --> CheckDraw[Check Draw]
+        CheckDraw -- Yes --> EndDraw[Declare Draw]
+        CheckDraw -- No --> Switch[Switch Player] --> Loop
+        EndWin --> End[Game Over]
+        EndDraw --> End
+
+  # 🧾 Example JSON Game State
+  json_example:
+    description: "Example of serialized game state after several moves."
+    state: |
+      {
+        "board": [
+          [" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+          [" ", "X", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+          [" ", "O", "X", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+          [" ", " ", " ", "O", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+          [" ", " ", " ", " ", "X", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+          [" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "]
+        ],
+        "current_player": "X",
+        "game_over": false,
+        "winner": null,
+        "move_history": [[1,1], [2,1], [2,2], [3,3], [4,4]],
+        "vs_ai": true
+      }
