@@ -31,7 +31,7 @@ Gomoku, hay còn gọi là cờ Caro, là một trò chơi hấp dẫn dành cho
 
 ## 🐍 Python Code
 
-Dự án được xây dựng hoàn toàn bằng Python với các tính năng chơi vòng lặp, AI cơ bản, và lưu/tải trận đấu. Xem mã nguồn đầy đủ trong tệp chính `gomoku.py`.
+Dự án được xây dựng hoàn toàn bằng Python với các tính năng chơi vòng lặp, AI cơ bản, và lưu/tải trận đấu. Xem mã nguồn đầy đủ trong tệp chính `gomoku.yml`.
 
 ---
 
