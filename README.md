@@ -1,61 +1,49 @@
 # Gomoku Game
 
-Gomoku, hay còn gọi là cờ Caro, là một trò chơi hấp dẫn dành cho 2 người chơi. Dự án này cung cấp một phiên bản Gomoku với khả năng chơi với AI và có tính năng lưu và tải lại trận đấu.
+This project implements a complete **Gomoku (Five in a Row)** game in Python, featuring:
+- A playable Gomoku game with an AI opponent.
+- Save/load functionality for game state persistence.
+- Undo functionality to revert the last move.
+- Visual representation of the game flow using a flowchart.
+- Well-documented code and a JSON example for game state serialization.
 
 ---
 
-## 🧠 Pseudocode
+## Features
 
-1. **Khởi tạo trò chơi**:
-    - Tạo bàn cờ kích thước 15x15.
-    - Đặt người chơi hiện tại là 'X'.
-    - Xác định đối thủ là AI hay con người.
-    - Đặt `game_over = False`.
+### 🎮 Gameplay
+- **Two modes**: Play against another human or challenge the AI.
+- **Win conditions**: Connect 5 consecutive stones in a row, column, or diagonal.
+- **Draw detection**: Game ends if no valid moves remain.
 
-2. **Trong khi trò chơi chưa kết thúc**:
-    - Hiển thị bàn cờ.
-    - Nếu người chơi hiện tại là AI:
-        - Tự động tạo nước đi.
-      Ngược lại:
-        - Nhập nước đi từ người dùng.
-    - Xác minh và thực hiện nước đi.
-    - Kiểm tra thắng/thua.
-    - Kiểm tra hòa.
-    - Nếu trò chơi tiếp tục, chuyển lượt người chơi.
-    - Tùy chọn lưu lại trận đấu.
+### 🔁 Key Functionalities
+- **Undo Moves**: Go back to the previous game state.
+- **Save Game**: Save your current progress to a JSON file.
+- **Load Game**: Resume gameplay from a previously saved state.
 
-3. **Khi trò chơi kết thúc**:
-    - Hiển thị người chiến thắng hoặc hòa.
+### 🤖 AI Opponent
+The AI makes random moves during its turn.
 
----
-
-## 🐍 Python Code
-
-Dự án được xây dựng hoàn toàn bằng Python với các tính năng chơi vòng lặp, AI cơ bản, và lưu/tải trận đấu. Xem mã nguồn đầy đủ trong tệp chính `gomoku.yml`.
-
----
-
-## 🔁 Flowchart
-
-Dưới đây là sơ đồ luồng hoạt động của trò chơi:
-
+### 📄 Game Flow
+The following flowchart illustrates the game's logic:
 ```mermaid
 graph TD
-  Start[Start Game] --> Init[Initialize Game State]
+  Start[Start Game] --> Init[Initialize Game]
   Init --> Opponent[Choose Opponent Type]
   Opponent --> Loop[Main Game Loop]
-  Loop --> ShowBoard[Display Board]
-  ShowBoard --> PlayerType{Is Current Player AI?}
-  PlayerType -- Yes --> AIMove[Generate AI Move]
-  PlayerType -- No --> GetMove[Prompt Human Move]
-  GetMove --> SaveCheck{Save Game?}
-  SaveCheck -- Yes --> SaveGame[Save to File] --> Loop
-  SaveCheck -- No --> Validate
-  AIMove --> Validate[Validate and Apply Move]
+  Loop --> Board[Display Board]
+  Board --> Action{Choose Action}
+  Action -- Move --> GetMove[Get Move Input]
+  Action -- Undo --> UndoMove[Undo Last Move] --> Loop
+  Action -- Save --> SaveGame[Save Game to File] --> Loop
+  Action -- Load --> LoadGame[Load Game from File] --> Loop
+  GetMove --> Validate[Validate Move]
   Validate -- Invalid --> Loop
-  Validate -- Valid --> CheckWin[Check Win]
+  Validate -- Valid --> ApplyMove[Apply Move]
+  ApplyMove --> CheckWin[Check Win]
   CheckWin -- Yes --> EndWin[Declare Winner]
   CheckWin -- No --> CheckDraw[Check Draw]
   CheckDraw -- Yes --> EndDraw[Declare Draw]
   CheckDraw -- No --> Switch[Switch Player] --> Loop
-  EndWin & EndDraw --> End[Game Over]
+  EndWin --> End[Game Over]
+  EndDraw --> End
