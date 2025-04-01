@@ -1,0 +1,174 @@
+gomoku_game:
+  # 🧠 Pseudocode with full logic including AI and save/load
+  pseudocode: |
+    1. Initialize game:
+       a. Create 15x15 board
+       b. Set current player to 'X'
+       c. Ask if opponent is AI or human
+       d. Set game_over = False
+    2. While game is not over:
+       a. Display board
+       b. If current player is AI:
+            - Generate move automatically
+          Else:
+            - Prompt user for move
+       c. Validate and apply move
+       d. Check for win
+       e. Check for draw
+       f. If game continues, switch player
+       g. Optionally, save game to file
+    3. After game ends, display winner or draw
+
+  # 🐍 Full Python code with play loop, AI, save/load
+  python_code: |
+    import json
+    import random
+    import os
+
+    class Gomoku:
+        SIZE = 15
+
+        def __init__(self, vs_ai=False):
+            self.board = [[' ' for _ in range(self.SIZE)] for _ in range(self.SIZE)]
+            self.current_player = 'X'
+            self.game_over = False
+            self.winner = None
+            self.vs_ai = vs_ai
+
+        def display_board(self):
+            print("   " + " ".join(f"{i:2}" for i in range(self.SIZE)))
+            for i, row in enumerate(self.board):
+                print(f"{i:2} " + " ".join(row))
+            print()
+
+        def is_valid_move(self, row, col):
+            return 0 <= row < self.SIZE and 0 <= col < self.SIZE and self.board[row][col] == ' '
+
+        def make_move(self, row, col):
+            if self.is_valid_move(row, col):
+                self.board[row][col] = self.current_player
+                return True
+            return False
+
+        def check_win(self, row, col):
+            directions = [(0, 1), (1, 0), (1, 1), (1, -1)]
+            for dx, dy in directions:
+                count = 1
+                count += self._count_direction(row, col, dx, dy)
+                count += self._count_direction(row, col, -dx, -dy)
+                if count >= 5:
+                    self.game_over = True
+                    self.winner = self.current_player
+                    return True
+            return False
+
+        def _count_direction(self, row, col, dx, dy):
+            count = 0
+            x, y = row + dx, col + dy
+            while 0 <= x < self.SIZE and 0 <= y < self.SIZE and self.board[x][y] == self.current_player:
+                count += 1
+                x += dx
+                y += dy
+            return count
+
+        def check_draw(self):
+            if all(cell != ' ' for row in self.board for cell in row):
+                self.game_over = True
+                return True
+            return False
+
+        def switch_player(self):
+            self.current_player = 'O' if self.current_player == 'X' else 'X'
+
+        def get_ai_move(self):
+            available = [(r, c) for r in range(self.SIZE) for c in range(self.SIZE) if self.board[r][c] == ' ']
+            return random.choice(available) if available else (0, 0)
+
+        def save_game(self, filename="gomoku_save.json"):
+            state = {
+                "board": self.board,
+                "current_player": self.current_player,
+                "game_over": self.game_over,
+                "winner": self.winner
+            }
+            with open(filename, "w") as f:
+                json.dump(state, f)
+
+        def load_game(self, filename="gomoku_save.json"):
+            if os.path.exists(filename):
+                with open(filename, "r") as f:
+                    state = json.load(f)
+                    self.board = state["board"]
+                    self.current_player = state["current_player"]
+                    self.game_over = state["game_over"]
+                    self.winner = state["winner"]
+
+        def play(self):
+            print("Welcome to Gomoku!")
+            while not self.game_over:
+                self.display_board()
+                if self.vs_ai and self.current_player == 'O':
+                    print("AI is thinking...")
+                    row, col = self.get_ai_move()
+                else:
+                    try:
+                        move = input(f"Player {self.current_player}, enter row,col (or 'save' to save): ")
+                        if move.lower() == 'save':
+                            self.save_game()
+                            print("Game saved.")
+                            continue
+                        row, col = map(int, move.strip().split(','))
+                    except:
+                        print("Invalid input. Try again.")
+                        continue
+
+                if not self.make_move(row, col):
+                    print("Invalid move. Try again.")
+                    continue
+
+                if self.check_win(row, col):
+                    self.display_board()
+                    print(f"🎉 Player {self.current_player} wins!")
+                elif self.check_draw():
+                    self.display_board()
+                    print("🤝 It's a draw!")
+                else:
+                    self.switch_player()
+
+  # 🔁 Flowchart with AI and save logic
+  flowchart: |
+    graph TD
+      Start[Start Game] --> Init[Initialize Game State]
+      Init --> Opponent[Choose Opponent Type]
+      Opponent --> Loop[Main Game Loop]
+      Loop --> ShowBoard[Display Board]
+      ShowBoard --> PlayerType{Is Current Player AI?}
+      PlayerType -- Yes --> AIMove[Generate AI Move]
+      PlayerType -- No --> GetMove[Prompt Human Move]
+      GetMove --> SaveCheck{Save Game?}
+      SaveCheck -- Yes --> SaveGame[Save to File] --> Loop
+      SaveCheck -- No --> Validate
+      AIMove --> Validate[Validate and Apply Move]
+      Validate -- Invalid --> Loop
+      Validate -- Valid --> CheckWin[Check Win]
+      CheckWin -- Yes --> EndWin[Declare Winner]
+      CheckWin -- No --> CheckDraw[Check Draw]
+      CheckDraw -- Yes --> EndDraw[Declare Draw]
+      CheckDraw -- No --> Switch[Switch Player] --> Loop
+      EndWin & EndDraw --> End[Game Over]
+
+  # 🧾 Sample JSON game state (after few moves)
+  json_example: |
+    {
+      "board": [
+        [" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+        [" ", "X", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+        [" ", "O", "X", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+        [" ", " ", " ", "O", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "],
+        ...,
+        [" ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " ", " "]
+      ],
+      "current_player": "X",
+      "game_over": false,
+      "winner": null
+    }
