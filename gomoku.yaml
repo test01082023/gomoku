@@ -1,0 +1,1374 @@
+```yaml
+project: <gomoku>
+  idea: |
+    Gomoku (Five in a Row) is a strategy board game played on a 15x15 grid where two players 
+    take turns placing stones (black and white) with the goal of creating an unbroken line 
+    of 5 stones horizontally, vertically, or diagonally. This implementation will include 
+    both human vs human and human vs AI gameplay modes with a graphical interface.
+
+  requirements: |
+    Functional Requirements:
+    - Support 15x15 game board
+    - Two game modes: Human vs Human, Human vs AI
+    - Detect win conditions (5 in a row in any direction)
+    - Prevent illegal moves (placing on occupied positions)
+    - Undo/Redo move functionality
+    - Save/Load game state
+    - AI with multiple difficulty levels (Easy, Medium, Hard)
+    
+    Non-Functional Requirements:
+    - AI move calculation < 2 seconds
+    - Responsive GUI with visual feedback
+    - Game state persistence in JSON format
+    - Cross-platform compatibility (Windows, Mac, Linux)
+    - Clean separation of game logic and UI
+
+  architecture: |
+    Layer Architecture:
+    1. Presentation Layer: GUI using tkinter
+    2. Game Logic Layer: Core game rules and state management
+    3. AI Layer: Minimax algorithm with alpha-beta pruning
+    4. Persistence Layer: JSON serialization for save/load
+    
+    Design Patterns:
+    - MVC Pattern: Separate Model (game logic), View (GUI), Controller (event handling)
+    - Strategy Pattern: Different AI difficulty implementations
+    - Observer Pattern: GUI updates on game state changes
+    - Command Pattern: Undo/Redo functionality
+
+  mermaid: |
+    ```mermaid
+    classDiagram
+        class GameBoard {
+            -int size
+            -int[][] board
+            -Stack moveHistory
+            +placeStone(x, y, player)
+            +isValidMove(x, y)
+            +checkWin(x, y, player)
+            +undoMove()
+            +redoMove()
+            +serialize()
+        }
+        
+        class GameController {
+            -GameBoard board
+            -Player currentPlayer
+            -GameState state
+            -AIPlayer aiPlayer
+            +startGame(mode)
+            +makeMove(x, y)
+            +switchPlayer()
+            +saveGame(filename)
+            +loadGame(filename)
+        }
+        
+        class AIPlayer {
+            -int difficulty
+            -int maxDepth
+            +calculateMove(board)
+            -minimax(board, depth, alpha, beta)
+            -evaluateBoard(board)
+            -getValidMoves(board)
+        }
+        
+        class GUI {
+            -GameController controller
+            -Canvas boardCanvas
+            +drawBoard()
+            +drawStone(x, y, color)
+            +handleClick(event)
+            +updateStatus(message)
+            +showWinner(player)
+        }
+        
+        class Player {
+            -String name
+            -int color
+            -PlayerType type
+        }
+        
+        GameController --> GameBoard
+        GameController --> Player
+        GameController --> AIPlayer
+        GUI --> GameController
+        AIPlayer --> GameBoard
+    ```
+
+  pseudocode: |
+    ```
+    # Core Game Logic
+    function checkWin(board, x, y, player):
+        directions = [(1,0), (0,1), (1,1), (1,-1)]  # horizontal, vertical, diagonals
+        for direction in directions:
+            count = 1 + countLine(board, x, y, direction, player) + 
+                       countLine(board, x, y, -direction, player)
+            if count >= 5:
+                return True
+        return False
+    
+    function countLine(board, x, y, direction, player):
+        count = 0
+        dx, dy = direction
+        nx, ny = x + dx, y + dy
+        while isInBounds(nx, ny) and board[nx][ny] == player:
+            count += 1
+            nx, ny = nx + dx, ny + dy
+        return count
+    
+    # AI Minimax Algorithm
+    function minimax(board, depth, isMaximizing, alpha, beta):
+        if depth == 0 or gameOver(board):
+            return evaluateBoard(board)
+        
+        if isMaximizing:
+            maxEval = -infinity
+            for move in getValidMoves(board):
+                board[move] = AI_PLAYER
+                eval = minimax(board, depth-1, False, alpha, beta)
+                board[move] = EMPTY
+                maxEval = max(maxEval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break  # Alpha-beta pruning
+            return maxEval
+        else:
+            minEval = infinity
+            for move in getValidMoves(board):
+                board[move] = HUMAN_PLAYER
+                eval = minimax(board, depth-1, True, alpha, beta)
+                board[move] = EMPTY
+                minEval = min(minEval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return minEval
+    
+    function evaluateBoard(board):
+        score = 0
+        # Check all possible lines of 5
+        for each position:
+            for each direction:
+                lineScore = evaluateLine(getLine(position, direction))
+                score += lineScore if AI_PLAYER else -lineScore
+        return score
+    ```
+
+  python: |
+    ```python
+    import tkinter as tk
+    from tkinter import messagebox, filedialog
+    import json
+    import copy
+    from enum import Enum
+    from typing import List, Tuple, Optional
+    import random
+    
+    class Player(Enum):
+        EMPTY = 0
+        BLACK = 1
+        WHITE = 2
+    
+    class GameMode(Enum):
+        HUMAN_VS_HUMAN = 1
+        HUMAN_VS_AI = 2
+    
+    class GameBoard:
+        def __init__(self, size: int = 15):
+            self.size = size
+            self.board = [[Player.EMPTY for _ in range(size)] for _ in range(size)]
+            self.move_history = []
+            self.redo_stack = []
+            
+        def place_stone(self, x: int, y: int, player: Player) -> bool:
+            if self.is_valid_move(x, y):
+                self.board[x][y] = player
+                self.move_history.append((x, y, player))
+                self.redo_stack.clear()
+                return True
+            return False
+        
+        def is_valid_move(self, x: int, y: int) -> bool:
+            return (0 <= x < self.size and 
+                    0 <= y < self.size and 
+                    self.board[x][y] == Player.EMPTY)
+        
+        def check_win(self, x: int, y: int, player: Player) -> bool:
+            directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+            
+            for dx, dy in directions:
+                count = 1
+                # Check positive direction
+                count += self._count_stones(x, y, dx, dy, player)
+                # Check negative direction
+                count += self._count_stones(x, y, -dx, -dy, player)
+                
+                if count >= 5:
+                    return True
+            return False
+        
+        def _count_stones(self, x: int, y: int, dx: int, dy: int, player: Player) -> int:
+            count = 0
+            nx, ny = x + dx, y + dy
+            
+            while (0 <= nx < self.size and 
+                   0 <= ny < self.size and 
+                   self.board[nx][ny] == player):
+                count += 1
+                nx, ny = nx + dx, ny + dy
+            
+            return count
+        
+        def undo_move(self) -> Optional[Tuple[int, int, Player]]:
+            if self.move_history:
+                move = self.move_history.pop()
+                x, y, player = move
+                self.board[x][y] = Player.EMPTY
+                self.redo_stack.append(move)
+                return move
+            return None
+        
+        def redo_move(self) -> Optional[Tuple[int, int, Player]]:
+            if self.redo_stack:
+                move = self.redo_stack.pop()
+                x, y, player = move
+                self.board[x][y] = player
+                self.move_history.append(move)
+                return move
+            return None
+        
+        def get_valid_moves(self) -> List[Tuple[int, int]]:
+            moves = []
+            for i in range(self.size):
+                for j in range(self.size):
+                    if self.board[i][j] == Player.EMPTY:
+                        # Only consider moves near existing stones for efficiency
+                        if self._has_neighbor(i, j):
+                            moves.append((i, j))
+            return moves if moves else [(self.size // 2, self.size // 2)]
+        
+        def _has_neighbor(self, x: int, y: int, distance: int = 2) -> bool:
+            for dx in range(-distance, distance + 1):
+                for dy in range(-distance, distance + 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    nx, ny = x + dx, y + dy
+                    if (0 <= nx < self.size and 
+                        0 <= ny < self.size and 
+                        self.board[nx][ny] != Player.EMPTY):
+                        return True
+            return False
+    
+    class AIPlayer:
+        def __init__(self, difficulty: str = "medium"):
+            self.difficulty = difficulty
+            self.max_depth = {"easy": 1, "medium": 3, "hard": 5}[difficulty]
+            
+        def get_move(self, board: GameBoard, player: Player) -> Tuple[int, int]:
+            if not board.move_history:
+                return (board.size // 2, board.size // 2)
+            
+            if self.difficulty == "easy":
+                return self._random_move(board)
+            else:
+                return self._minimax_move(board, player)
+        
+        def _random_move(self, board: GameBoard) -> Tuple[int, int]:
+            valid_moves = board.get_valid_moves()
+            return random.choice(valid_moves)
+        
+        def _minimax_move(self, board: GameBoard, player: Player) -> Tuple[int, int]:
+            best_move = None
+            best_score = float('-inf')
+            alpha = float('-inf')
+            beta = float('inf')
+            
+            for move in board.get_valid_moves():
+                x, y = move
+                board.board[x][y] = player
+                
+                score = self._minimax(board, self.max_depth - 1, False, alpha, beta,
+                                     player, self._get_opponent(player))
+                
+                board.board[x][y] = Player.EMPTY
+                
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+                    
+                alpha = max(alpha, score)
+            
+            return best_move
+        
+        def _minimax(self, board: GameBoard, depth: int, is_maximizing: bool,
+                    alpha: float, beta: float, ai_player: Player, 
+                    human_player: Player) -> float:
+            if depth == 0:
+                return self._evaluate_board(board, ai_player)
+            
+            valid_moves = board.get_valid_moves()[:10]  # Limit moves for performance
+            
+            if is_maximizing:
+                max_eval = float('-inf')
+                for x, y in valid_moves:
+                    board.board[x][y] = ai_player
+                    if board.check_win(x, y, ai_player):
+                        board.board[x][y] = Player.EMPTY
+                        return 10000
+                    eval_score = self._minimax(board, depth - 1, False, alpha, beta,
+                                              ai_player, human_player)
+                    board.board[x][y] = Player.EMPTY
+                    max_eval = max(max_eval, eval_score)
+                    alpha = max(alpha, eval_score)
+                    if beta <= alpha:
+                        break
+                return max_eval
+            else:
+                min_eval = float('inf')
+                for x, y in valid_moves:
+                    board.board[x][y] = human_player
+                    if board.check_win(x, y, human_player):
+                        board.board[x][y] = Player.EMPTY
+                        return -10000
+                    eval_score = self._minimax(board, depth - 1, True, alpha, beta,
+                                              ai_player, human_player)
+                    board.board[x][y] = Player.EMPTY
+                    min_eval = min(min_eval, eval_score)
+                    beta = min(beta, eval_score)
+                    if beta <= alpha:
+                        break
+                return min_eval
+        
+        def _evaluate_board(self, board: GameBoard, player: Player) -> float:
+            score = 0
+            patterns = {
+                4: 1000,   # Four in a row
+                3: 100,    # Three in a row
+                2: 10,     # Two in a row
+                1: 1       # Single stone
+            }
+            
+            # Evaluate all directions from each position
+            for i in range(board.size):
+                for j in range(board.size):
+                    if board.board[i][j] != Player.EMPTY:
+                        current_player = board.board[i][j]
+                        multiplier = 1 if current_player == player else -1
+                        
+                        # Check all four directions
+                        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+                        for dx, dy in directions:
+                            length = self._count_consecutive(board, i, j, dx, dy, current_player)
+                            if length in patterns:
+                                score += patterns[length] * multiplier
+            
+            return score
+        
+        def _count_consecutive(self, board: GameBoard, x: int, y: int, 
+                              dx: int, dy: int, player: Player) -> int:
+            count = 0
+            nx, ny = x, y
+            
+            while (0 <= nx < board.size and 
+                   0 <= ny < board.size and 
+                   board.board[nx][ny] == player):
+                count += 1
+                nx, ny = nx + dx, ny + dy
+                if count > 4:  # No need to count beyond 5
+                    break
+            
+            return count
+        
+        def _get_opponent(self, player: Player) -> Player:
+            return Player.WHITE if player == Player.BLACK else Player.BLACK
+    
+    class GameController:
+        def __init__(self):
+            self.board = GameBoard()
+            self.current_player = Player.BLACK
+            self.mode = GameMode.HUMAN_VS_HUMAN
+            self.ai_player = None
+            self.game_over = False
+            
+        def start_game(self, mode: GameMode, ai_difficulty: str = "medium"):
+            self.board = GameBoard()
+            self.current_player = Player.BLACK
+            self.mode = mode
+            self.game_over = False
+            
+            if mode == GameMode.HUMAN_VS_AI:
+                self.ai_player = AIPlayer(ai_difficulty)
+        
+        def make_move(self, x: int, y: int) -> Tuple[bool, bool, Player]:
+            if self.game_over:
+                return False, False, None
+            
+            if self.board.place_stone(x, y, self.current_player):
+                if self.board.check_win(x, y, self.current_player):
+                    self.game_over = True
+                    return True, True, self.current_player
+                
+                self.switch_player()
+                return True, False, None
+            
+            return False, False, None
+        
+        def make_ai_move(self) -> Tuple[int, int, bool, Player]:
+            if self.ai_player and self.current_player == Player.WHITE:
+                x, y = self.ai_player.get_move(self.board, self.current_player)
+                success, win, winner = self.make_move(x, y)
+                return x, y, win, winner
+            return None, None, False, None
+        
+        def switch_player(self):
+            self.current_player = (Player.WHITE if self.current_player == Player.BLACK 
+                                  else Player.BLACK)
+        
+        def undo_move(self):
+            move = self.board.undo_move()
+            if move:
+                self.switch_player()
+                self.game_over = False
+                
+                # If playing against AI, undo AI's move too
+                if self.mode == GameMode.HUMAN_VS_AI and self.board.move_history:
+                    self.board.undo_move()
+                    self.switch_player()
+        
+        def redo_move(self):
+            move = self.board.redo_move()
+            if move:
+                x, y, player = move
+                if self.board.check_win(x, y, player):
+                    self.game_over = True
+                else:
+                    self.switch_player()
+        
+        def save_game(self, filename: str):
+            game_state = {
+                'board': [[cell.value for cell in row] for row in self.board.board],
+                'move_history': [(x, y, p.value) for x, y, p in self.board.move_history],
+                'current_player': self.current_player.value,
+                'mode': self.mode.value,
+                'game_over': self.game_over
+            }
+            with open(filename, 'w') as f:
+                json.dump(game_state, f)
+        
+        def load_game(self, filename: str):
+            with open(filename, 'r') as f:
+                game_state = json.load(f)
+            
+            self.board = GameBoard()
+            self.board.board = [[Player(cell) for cell in row] for row in game_state['board']]
+            self.board.move_history = [(x, y, Player(p)) for x, y, p in game_state['move_history']]
+            self.current_player = Player(game_state['current_player'])
+            self.mode = GameMode(game_state['mode'])
+            self.game_over = game_state['game_over']
+            
+            if self.mode == GameMode.HUMAN_VS_AI:
+                self.ai_player = AIPlayer()
+    
+    class GomokuGUI:
+        def __init__(self):
+            self.window = tk.Tk()
+            self.window.title("Gomoku")
+            self.controller = GameController()
+            self.cell_size = 40
+            self.board_size = 15
+            self.canvas_size = self.cell_size * self.board_size
+            
+            self.setup_ui()
+            self.new_game()
+        
+        def setup_ui(self):
+            # Menu bar
+            menubar = tk.Menu(self.window)
+            self.window.config(menu=menubar)
+            
+            game_menu = tk.Menu(menubar, tearoff=0)
+            menubar.add_cascade(label="Game", menu=game_menu)
+            game_menu.add_command(label="New Game (Human vs Human)", 
+                                command=lambda: self.new_game(GameMode.HUMAN_VS_HUMAN))
+            game_menu.add_command(label="New Game (Human vs AI - Easy)", 
+                                command=lambda: self.new_game(GameMode.HUMAN_VS_AI, "easy"))
+            game_menu.add_command(label="New Game (Human vs AI - Medium)", 
+                                command=lambda: self.new_game(GameMode.HUMAN_VS_AI, "medium"))
+            game_menu.add_command(label="New Game (Human vs AI - Hard)", 
+                                command=lambda: self.new_game(GameMode.HUMAN_VS_AI, "hard"))
+            game_menu.add_separator()
+            game_menu.add_command(label="Save Game", command=self.save_game)
+            game_menu.add_command(label="Load Game", command=self.load_game)
+            game_menu.add_separator()
+            game_menu.add_command(label="Exit", command=self.window.quit)
+            
+            edit_menu = tk.Menu(menubar, tearoff=0)
+            menubar.add_cascade(label="Edit", menu=edit_menu)
+            edit_menu.add_command(label="Undo", command=self.undo_move)
+            edit_menu.add_command(label="Redo", command=self.redo_move)
+            
+            # Main frame
+            main_frame = tk.Frame(self.window)
+            main_frame.pack(padx=10, pady=10)
+            
+            # Status label
+            self.status_label = tk.Label(main_frame, text="", font=("Arial", 14))
+            self.status_label.pack()
+            
+            # Canvas for the game board
+            self.canvas = tk.Canvas(main_frame, width=self.canvas_size, 
+                                   height=self.canvas_size, bg="burlywood")
+            self.canvas.pack()
+            self.canvas.bind("<Button-1>", self.on_click)
+            
+            # Control buttons
+            button_frame = tk.Frame(main_frame)
+            button_frame.pack(pady=10)
+            
+            tk.Button(button_frame, text="Undo", command=self.undo_move).pack(side=tk.LEFT, padx=5)
+            tk.Button(button_frame, text="Redo", command=self.redo_move).pack(side=tk.LEFT, padx=5)
+            tk.Button(button_frame, text="New Game", command=self.new_game).pack(side=tk.LEFT, padx=5)
+        
+        def new_game(self, mode: GameMode = GameMode.HUMAN_VS_HUMAN, ai_difficulty: str = "medium"):
+            self.controller.start_game(mode, ai_difficulty)
+            self.draw_board()
+            self.update_status()
+        
+        def draw_board(self):
+            self.canvas.delete("all")
+            
+            # Draw grid lines
+            for i in range(self.board_size):
+                # Vertical lines
+                x = i * self.cell_size
+                self.canvas.create_line(x, 0, x, self.canvas_size, fill="black")
+                # Horizontal lines
+                y = i * self.cell_size
+                self.canvas.create_line(0, y, self.canvas_size, y, fill="black")
+            
+            # Draw stones
+            for i in range(self.board_size):
+                for j in range(self.board_size):
+                    if self.controller.board.board[i][j] != Player.EMPTY:
+                        self.draw_stone(i, j, self.controller.board.board[i][j])
+            
+            # Highlight last move
+            if self.controller.board.move_history:
+                last_x, last_y, _ = self.controller.board.move_history[-1]
+                self.highlight_last_move(last_x, last_y)
+        
+        def draw_stone(self, x: int, y: int, player: Player):
+            center_x = x * self.cell_size + self.cell_size // 2
+            center_y = y * self.cell_size + self.cell_size // 2
+            radius = self.cell_size // 2 - 5
+            
+            color = "black" if player == Player.BLACK else "white"
+            outline = "white" if player == Player.BLACK else "black"
+            
+            self.canvas.create_oval(center_x - radius, center_y - radius,
+                                   center_x + radius, center_y + radius,
+                                   fill=color, outline=outline, width=2)
+        
+        def highlight_last_move(self, x: int, y: int):
+            center_x = x * self.cell_size + self.cell_size // 2
+            center_y = y * self.cell_size + self.cell_size // 2
+            
+            self.canvas.create_rectangle(center_x - 5, center_y - 5,
+                                       center_x + 5, center_y + 5,
+                                       fill="red", outline="red")
+        
+        def on_click(self, event):
+            if self.controller.game_over:
+                return
+            
+            x = event.x // self.cell_size
+            y = event.y // self.cell_size
+            
+            success, win, winner = self.controller.make_move(x, y)
+            
+            if success:
+                self.draw_board()
+                
+                if win:
+                    self.show_winner(winner)
+                else:
+                    self.update_status()
+                    
+                    # Make AI move if applicable
+                    if (self.controller.mode == GameMode.HUMAN_VS_AI and 
+                        self.controller.current_player == Player.WHITE):
+                        self.window.after(100, self.make_ai_move)
+        
+        def make_ai_move(self):
+            x, y, win, winner = self.controller.make_ai_move()
+            if x is not None:
+                self.draw_board()
+                if win:
+                    self.show_winner(winner)
+                else:
+                    self.update_status()
+        
+        def update_status(self):
+            if not self.controller.game_over:
+                player = "Black" if self.controller.current_player == Player.BLACK else "White"
+                self.status_label.config(text=f"Current Player: {player}")
+            else:
+                self.status_label.config(text="Game Over")
+        
+        def show_winner(self, winner: Player):
+            player = "Black" if winner == Player.BLACK else "White"
+            self.status_label.config(text=f"Game Over - {player} Wins!")
+            messagebox.showinfo("Game Over", f"{player} wins!")
+        
+        def undo_move(self):
+            self.controller.undo_move()
+            self.draw_board()
+            self.update_status()
+        
+        def redo_move(self):
+            self.controller.redo_move()
+            self.draw_board()
+            self.update_status()
+        
+        def save_game(self):
+            filename = filedialog.asksaveasfilename(defaultextension=".json",
+                                                   filetypes=[("JSON files", "*.json")])
+            if filename:
+                self.controller.save_game(filename)
+                messagebox.showinfo("Save Game", "Game saved successfully!")
+        
+        def load_game(self):
+            filename = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
+            if filename:
+                self.controller.load_game(filename)
+                self.draw_board()
+                self.update_status()
+                messagebox.showinfo("Load Game", "Game loaded successfully!")
+        
+        def run(self):
+            self.window.mainloop()
+    
+    if __name__ == "__main__":
+        game = GomokuGUI()
+        game.run()
+    ```
+
+  tests: |
+    ```python
+    import unittest
+    from gomoku import GameBoard, Player, GameController, AIPlayer, GameMode
+    
+    class TestGameBoard(unittest.TestCase):
+        def setUp(self):
+            self.board = GameBoard(15)
+        
+        def test_initial_board(self):
+            """Test that board is initialized correctly"""
+            self.assertEqual(len(self.board.board), 15)
+            self.assertEqual(len(self.board.board[0]), 15)
+            for row in self.board.board:
+                for cell in row:
+                    self.assertEqual(cell, Player.EMPTY)
+        
+        def test_place_stone(self):
+            """Test placing stones on the board"""
+            self.assertTrue(self.board.place_stone(7, 7, Player.BLACK))
+            self.assertEqual(self.board.board[7][7], Player.BLACK)
+            
+            # Test placing on occupied position
+            self.assertFalse(self.board.place_stone(7, 7, Player.WHITE))
+            self.assertEqual(self.board.board[7][7], Player.BLACK)
+        
+        def test_is_valid_move(self):
+            """Test move validation"""
+            self.assertTrue(self.board.is_valid_move(0, 0))
+            self.assertTrue(self.board.is_valid_move(14, 14))
+            self.assertFalse(self.board.is_valid_move(-1, 0))
+            self.assertFalse(self.board.is_valid_move(15, 0))
+            
+            self.board.place_stone(7, 7, Player.BLACK)
+            self.assertFalse(self.board.is_valid_move(7, 7))
+        
+        def test_horizontal_win(self):
+            """Test horizontal win detection"""
+            for i in range(5):
+                self.board.place_stone(7, i, Player.BLACK)
+            
+            self.assertTrue(self.board.check_win(7, 2, Player.BLACK))
+            self.assertFalse(self.board.check_win(7, 2, Player.WHITE))
+        
+        def test_vertical_win(self):
+            """Test vertical win detection"""
+            for i in range(5):
+                self.board.place_stone(i, 7, Player.WHITE)
+            
+            self.assertTrue(self.board.check_win(2, 7, Player.WHITE))
+            self.assertFalse(self.board.check_win(2, 7, Player.BLACK))
+        
+        def test_diagonal_win(self):
+            """Test diagonal win detection"""
+            for i in range(5):
+                self.board.place_stone(i, i, Player.BLACK)
+            
+            self.assertTrue(self.board.check_win(2, 2, Player.BLACK))
+            
+            # Test anti-diagonal
+            for i in range(5):
+                self.board.place_stone(i, 9 - i, Player.WHITE)
+            
+            self.assertTrue(self.board.check_win(2, 7, Player.WHITE))
+        
+        def test_undo_redo(self):
+            """Test undo and redo functionality"""
+            self.board.place_stone(7, 7, Player.BLACK)
+            self.board.place_stone(8, 8, Player.WHITE)
+            
+            # Test undo
+            move = self.board.undo_move()
+            self.assertEqual(move, (8, 8, Player.WHITE))
+            self.assertEqual(self.board.board[8][8], Player.EMPTY)
+            
+            # Test redo
+            move = self.board.redo_move()
+            self.assertEqual(move, (8, 8, Player.WHITE))
+            self.assertEqual(self.board.board[8][8], Player.WHITE)
+        
+        def test_get_valid_moves(self):
+            """Test getting valid moves"""
+            # Empty board should return center position
+            moves = self.board.get_valid_moves()
+            self.assertEqual(moves, [(7, 7)])
+            
+            # After placing a stone, should return neighboring positions
+            self.board.place_stone(7, 7, Player.BLACK)
+            moves = self.board.get_valid_moves()
+            self.assertGreater(len(moves), 0)
+            self.assertNotIn((7, 7), moves)
+    
+    class TestGameController(unittest.TestCase):
+        def setUp(self):
+            self.controller = GameController()
+        
+        def test_start_game(self):
+            """Test game initialization"""
+            self.controller.start_game(GameMode.HUMAN_VS_HUMAN)
+            self.assertEqual(self.controller.current_player, Player.BLACK)
+            self.assertFalse(self.controller.game_over)
+            self.assertIsNone(self.controller.ai_player)
+            
+            self.controller.start_game(GameMode.HUMAN_VS_AI)
+            self.assertIsNotNone(self.controller.ai_player)
+        
+        def test_make_move(self):
+            """Test making moves"""
+            self.controller.start_game(GameMode.HUMAN_VS_HUMAN)
+            
+            success, win, winner = self.controller.make_move(7, 7)
+            self.assertTrue(success)
+            self.assertFalse(win)
+            self.assertIsNone(winner)
+            self.assertEqual(self.controller.current_player, Player.WHITE)
+            
+            # Test invalid move
+            success, win, winner = self.controller.make_move(7, 7)
+            self.assertFalse(success)
+        
+        def test_win_detection(self):
+            """Test win detection during gameplay"""
+            self.controller.start_game(GameMode.HUMAN_VS_HUMAN)
+            
+            # Create a winning condition for black
+            for i in range(4):
+                self.controller.make_move(i, 0)  # Black
+                self.controller.make_move(i, 1)  # White
+            
+            success, win, winner = self.controller.make_move(4, 0)  # Black wins
+            self.assertTrue(success)
+            self.assertTrue(win)
+            self.assertEqual(winner, Player.BLACK)
+            self.assertTrue(self.controller.game_over)
+        
+        def test_save_load_game(self):
+            """Test saving and loading game state"""
+            import tempfile
+            import os
+            
+            self.controller.start_game(GameMode.HUMAN_VS_HUMAN)
+            self.controller.make_move(7, 7)
+            self.controller.make_move(8, 8)
+            
+            # Save game
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+                filename = f.name
+            
+            self.controller.save_game(filename)
+            
+            # Create new controller and load game
+            new_controller = GameController()
+            new_controller.load_game(filename)
+            
+            # Verify loaded state
+            self.assertEqual(new_controller.board.board[7][7], Player.BLACK)
+            self.assertEqual(new_controller.board.board[8][8], Player.WHITE)
+            self.assertEqual(new_controller.current_player, Player.BLACK)
+            
+            # Clean up
+            os.unlink(filename)
+    
+    class TestAIPlayer(unittest.TestCase):
+        def setUp(self):
+            self.ai = AIPlayer("medium")
+            self.board = GameBoard(15)
+        
+        def test_ai_first_move(self):
+            """Test AI's first move is center"""
+            move = self.ai.get_move(self.board, Player.BLACK)
+            self.assertEqual(move, (7, 7))
+        
+        def test_ai_blocks_winning_move(self):
+            """Test that AI blocks opponent's winning move"""
+            # Create a situation where opponent has 4 in a row
+            for i in range(4):
+                self.board.place_stone(i, 0, Player.BLACK)
+            
+            # AI should block at position (4, 0)
+            ai = AIPlayer("hard")
+            move = ai.get_move(self.board, Player.WHITE)
+            self.assertEqual(move, (4, 0))
+        
+        def test_ai_makes_winning_move(self):
+            """Test that AI makes winning move when available"""
+            # Create a situation where AI has 4 in a row
+            for i in range(4):
+                self.board.place_stone(i, 0, Player.WHITE)
+            
+            ai = AIPlayer("hard")
+            move = ai.get_move(self.board, Player.WHITE)
+            self.assertEqual(move, (4, 0))
+        
+        def test_ai_difficulty_levels(self):
+            """Test different difficulty levels"""
+            easy_ai = AIPlayer("easy")
+            medium_ai = AIPlayer("medium")
+            hard_ai = AIPlayer("hard")
+            
+            self.assertEqual(easy_ai.max_depth, 1)
+            self.assertEqual(medium_ai.max_depth, 3)
+            self.assertEqual(hard_ai.max_depth, 5)
+    
+    class TestIntegration(unittest.TestCase):
+        def test_full_game_human_vs_human(self):
+            """Test a complete game flow"""
+            controller = GameController()
+            controller.start_game(GameMode.HUMAN_VS_HUMAN)
+            
+            # Simulate a game
+            moves = [
+                (7, 7), (7, 8),   # Black, White
+                (8, 7), (8, 8),   # Black, White
+                (9, 7), (9, 8),   # Black, White
+                (10, 7), (10, 8), # Black, White
+                (11, 7)           # Black wins
+            ]
+            
+            for i, (x, y) in enumerate(moves[:-1]):
+                success, win, winner = controller.make_move(x, y)
+                self.assertTrue(success)
+                self.assertFalse(win)
+            
+            # Last move wins
+            success, win, winner = controller.make_move(11, 7)
+            self.assertTrue(success)
+            self.assertTrue(win)
+            self.assertEqual(winner, Player.BLACK)
+        
+        def test_full_game_human_vs_ai(self):
+            """Test a game against AI"""
+            controller = GameController()
+            controller.start_game(GameMode.HUMAN_VS_AI, "easy")
+            
+            # Human makes first move
+            success, win, winner = controller.make_move(7, 7)
+            self.assertTrue(success)
+            self.assertFalse(win)
+            
+            # AI should make a move
+            x, y, win, winner = controller.make_ai_move()
+            self.assertIsNotNone(x)
+            self.assertIsNotNone(y)
+            self.assertTrue(controller.board.board[x][y] == Player.WHITE)
+    
+    if __name__ == '__main__':
+        unittest.main()
+    ```
+
+  api: |
+    ```python
+    # flask_api.py
+    from flask import Flask, request, jsonify
+    from flask_cors import CORS
+    from gomoku import GameController, GameMode, Player, AIPlayer
+    import uuid
+    
+    app = Flask(__name__)
+    CORS(app)
+    
+    # Store game sessions
+    games = {}
+    
+    @app.route('/api/game/new', methods=['POST'])
+    def new_game():
+        """Create a new game session"""
+        data = request.json
+        game_id = str(uuid.uuid4())
+        
+        controller = GameController()
+        mode = GameMode[data.get('mode', 'HUMAN_VS_HUMAN')]
+        difficulty = data.get('difficulty', 'medium')
+        
+        controller.start_game(mode, difficulty)
+        games[game_id] = controller
+        
+        return jsonify({
+            'game_id': game_id,
+            'board': _serialize_board(controller.board.board),
+            'current_player': controller.current_player.value,
+            'mode': mode.value
+        })
+    
+    @app.route('/api/game/<game_id>/move', methods=['POST'])
+    def make_move(game_id):
+        """Make a move in the game"""
+        if game_id not in games:
+            return jsonify({'error': 'Game not found'}), 404
+        
+        controller = games[game_id]
+        data = request.json
+        x, y = data['x'], data['y']
+        
+        success, win, winner = controller.make_move(x, y)
+        
+        response = {
+            'success': success,
+            'board': _serialize_board(controller.board.board),
+            'current_player': controller.current_player.value,
+            'game_over': win,
+            'winner': winner.value if winner else None
+        }
+        
+        # If playing against AI and move was successful, make AI move
+        if (success and not win and 
+            controller.mode == GameMode.HUMAN_VS_AI and 
+            controller.current_player == Player.WHITE):
+            
+            ai_x, ai_y, ai_win, ai_winner = controller.make_ai_move()
+            response['ai_move'] = {'x': ai_x, 'y': ai_y}
+            response['board'] = _serialize_board(controller.board.board)
+            response['current_player'] = controller.current_player.value
+            response['game_over'] = ai_win
+            response['winner'] = ai_winner.value if ai_winner else None
+        
+        return jsonify(response)
+    
+    @app.route('/api/game/<game_id>/undo', methods=['POST'])
+    def undo_move(game_id):
+        """Undo the last move"""
+        if game_id not in games:
+            return jsonify({'error': 'Game not found'}), 404
+        
+        controller = games[game_id]
+        controller.undo_move()
+        
+        return jsonify({
+            'board': _serialize_board(controller.board.board),
+            'current_player': controller.current_player.value
+        })
+    
+    @app.route('/api/game/<game_id>/state', methods=['GET'])
+    def get_game_state(game_id):
+        """Get current game state"""
+        if game_id not in games:
+            return jsonify({'error': 'Game not found'}), 404
+        
+        controller = games[game_id]
+        
+        return jsonify({
+            'board': _serialize_board(controller.board.board),
+            'current_player': controller.current_player.value,
+            'game_over': controller.game_over,
+            'move_history': [(x, y, p.value) for x, y, p in controller.board.move_history]
+        })
+    
+    def _serialize_board(board):
+        """Convert board to JSON-serializable format"""
+        return [[cell.value for cell in row] for row in board]
+    
+    if __name__ == '__main__':
+        app.run(debug=True, port=5000)
+    ```
+
+  database: |
+    ```sql
+    -- PostgreSQL schema for persistent game storage
+    
+    CREATE DATABASE gomoku_db;
+    
+    -- Players table
+    CREATE TABLE players (
+        player_id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        email VARCHAR(100) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        rating INT DEFAULT 1200,
+        games_played INT DEFAULT 0,
+        games_won INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- Games table
+    CREATE TABLE games (
+        game_id SERIAL PRIMARY KEY,
+        player1_id INT REFERENCES players(player_id),
+        player2_id INT REFERENCES players(player_id),
+        game_mode VARCHAR(20) NOT NULL,
+        ai_difficulty VARCHAR(10),
+        winner_id INT REFERENCES players(player_id),
+        game_state JSONB NOT NULL,
+        move_count INT DEFAULT 0,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ended_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE
+    );
+    
+    -- Moves table for move history
+    CREATE TABLE moves (
+        move_id SERIAL PRIMARY KEY,
+        game_id INT REFERENCES games(game_id) ON DELETE CASCADE,
+        player_id INT REFERENCES players(player_id),
+        move_number INT NOT NULL,
+        x_position INT NOT NULL,
+        y_position INT NOT NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(game_id, move_number)
+    );
+    
+    -- Leaderboard view
+    CREATE VIEW leaderboard AS
+    SELECT 
+        username,
+        rating,
+        games_played,
+        games_won,
+        CASE 
+            WHEN games_played > 0 
+            THEN ROUND((games_won::numeric / games_played) * 100, 2)
+            ELSE 0 
+        END as win_rate
+    FROM players
+    ORDER BY rating DESC;
+    
+    -- Indexes for performance
+    CREATE INDEX idx_games_players ON games(player1_id, player2_id);
+    CREATE INDEX idx_games_active ON games(is_active);
+    CREATE INDEX idx_moves_game ON moves(game_id);
+    CREATE INDEX idx_players_rating ON players(rating DESC);
+    
+    -- SQLAlchemy models (Python)
+    """
+    from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, JSON
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import relationship, sessionmaker
+    from datetime import datetime
+    
+    Base = declarative_base()
+    
+    class Player(Base):
+        __tablename__ = 'players'
+        
+        player_id = Column(Integer, primary_key=True)
+        username = Column(String(50), unique=True, nullable=False)
+        email = Column(String(100), unique=True, nullable=False)
+        password_hash = Column(String(255), nullable=False)
+        rating = Column(Integer, default=1200)
+        games_played = Column(Integer, default=0)
+        games_won = Column(Integer, default=0)
+        created_at = Column(DateTime, default=datetime.utcnow)
+        
+        games_as_player1 = relationship('Game', foreign_keys='Game.player1_id', back_populates='player1')
+        games_as_player2 = relationship('Game', foreign_keys='Game.player2_id', back_populates='player2')
+        moves = relationship('Move', back_populates='player')
+    
+    class Game(Base):
+        __tablename__ = 'games'
+        
+        game_id = Column(Integer, primary_key=True)
+        player1_id = Column(Integer, ForeignKey('players.player_id'))
+        player2_id = Column(Integer, ForeignKey('players.player_id'))
+        game_mode = Column(String(20), nullable=False)
+        ai_difficulty = Column(String(10))
+        winner_id = Column(Integer, ForeignKey('players.player_id'))
+        game_state = Column(JSON, nullable=False)
+        move_count = Column(Integer, default=0)
+        started_at = Column(DateTime, default=datetime.utcnow)
+        ended_at = Column(DateTime)
+        is_active = Column(Boolean, default=True)
+        
+        player1 = relationship('Player', foreign_keys=[player1_id], back_populates='games_as_player1')
+        player2 = relationship('Player', foreign_keys=[player2_id], back_populates='games_as_player2')
+        winner = relationship('Player', foreign_keys=[winner_id])
+        moves = relationship('Move', back_populates='game', cascade='all, delete-orphan')
+    
+    class Move(Base):
+        __tablename__ = 'moves'
+        
+        move_id = Column(Integer, primary_key=True)
+        game_id = Column(Integer, ForeignKey('games.game_id', ondelete='CASCADE'))
+        player_id = Column(Integer, ForeignKey('players.player_id'))
+        move_number = Column(Integer, nullable=False)
+        x_position = Column(Integer, nullable=False)
+        y_position = Column(Integer, nullable=False)
+        timestamp = Column(DateTime, default=datetime.utcnow)
+        
+        game = relationship('Game', back_populates='moves')
+        player = relationship('Player', back_populates='moves')
+    """
+    ```
+
+  deployment: |
+    ```yaml
+    # docker-compose.yml
+    version: '3.8'
+    
+    services:
+      web:
+        build: .
+        ports:
+          - "5000:5000"
+        environment:
+          - DATABASE_URL=postgresql://gomoku:password@db:5432/gomoku_db
+          - REDIS_URL=redis://redis:6379
+        depends_on:
+          - db
+          - redis
+        volumes:
+          - ./app:/app
+        command: gunicorn -w 4 -b 0.0.0.0:5000 app:app
+    
+      db:
+        image: postgres:13
+        environment:
+          - POSTGRES_USER=gomoku
+          - POSTGRES_PASSWORD=password
+          - POSTGRES_DB=gomoku_db
+        volumes:
+          - postgres_data:/var/lib/postgresql/data
+          - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+        ports:
+          - "5432:5432"
+    
+      redis:
+        image: redis:6-alpine
+        ports:
+          - "6379:6379"
+    
+      nginx:
+        image: nginx:alpine
+        ports:
+          - "80:80"
+        volumes:
+          - ./nginx.conf:/etc/nginx/nginx.conf
+          - ./static:/usr/share/nginx/html
+        depends_on:
+          - web
+    
+    volumes:
+      postgres_data:
+    ```
+    
+    ```dockerfile
+    # Dockerfile
+    FROM python:3.9-slim
+    
+    WORKDIR /app
+    
+    # Install system dependencies
+    RUN apt-get update && apt-get install -y \
+        gcc \
+        postgresql-client \
+        && rm -rf /var/lib/apt/lists/*
+    
+    # Install Python dependencies
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir -r requirements.txt
+    
+    # Copy application code
+    COPY . .
+    
+    # Create non-root user
+    RUN useradd -m -u 1000 gomoku && chown -R gomoku:gomoku /app
+    USER gomoku
+    
+    # Run the application
+    CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
+    ```
+    
+    ```txt
+    # requirements.txt
+    Flask==2.1.0
+    Flask-CORS==3.0.10
+    Flask-SQLAlchemy==2.5.1
+    Flask-Login==0.5.0
+    gunicorn==20.1.0
+    psycopg2-binary==2.9.1
+    redis==3.5.3
+    SQLAlchemy==1.4.25
+    pytest==6.2.5
+    pytest-cov==2.12.1
+    ```
+    
+    ```yaml
+    # .github/workflows/ci.yml
+    name: CI/CD Pipeline
+    
+    on:
+      push:
+        branches: [main, develop]
+      pull_request:
+        branches: [main]
+    
+    jobs:
+      test:
+        runs-on: ubuntu-latest
+        
+        services:
+          postgres:
+            image: postgres:13
+            env:
+              POSTGRES_PASSWORD: postgres
+            options: >-
+              --health-cmd pg_isready
+              --health-interval 10s
+              --health-timeout 5s
+              --health-retries 5
+        
+        steps:
+        - uses: actions/checkout@v2
+        
+        - name: Set up Python
+          uses: actions/setup-python@v2
+          with:
+            python-version: 3.9
+        
+        - name: Install dependencies
+          run: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+        
+        - name: Run tests
+          run: |
+            pytest tests/ --cov=app --cov-report=xml
+        
+        - name: Upload coverage
+          uses: codecov/codecov-action@v2
+          with:
+            file: ./coverage.xml
+    
+      build:
+        needs: test
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        
+        steps:
+        - uses: actions/checkout@v2
+        
+        - name: Build Docker image
+          run: docker build -t gomoku:${{ github.sha }} .
+        
+        - name: Push to registry
+          run: |
+            echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+            docker tag gomoku:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/gomoku:latest
+            docker push ${{ secrets.DOCKER_USERNAME }}/gomoku:latest
+    ```
+
+  json: |
+    ```json
+    {
+      "game_config": {
+        "board_size": 15,
+        "win_condition": 5,
+        "time_limit": {
+          "enabled": false,
+          "seconds_per_move": 30,
+          "total_seconds": 1800
+        },
+        "ai_settings": {
+          "easy": {
+            "max_depth": 1,
+            "evaluation_method": "simple",
+            "randomness": 0.3
+          },
+          "medium": {
+            "max_depth": 3,
+            "evaluation_method": "pattern",
+            "randomness": 0.1
+          },
+          "hard": {
+            "max_depth": 5,
+            "evaluation_method": "advanced",
+            "randomness": 0,
+            "use_opening_book": true
+          }
+        },
+        "rules": {
+          "allow_overline": false,
+          "tournament_rules": false
+        }
+      },
+      
+      "game_state_example": {
+        "game_id": "550e8400-e29b-41d4-a716-446655440000",
+        "board": [
+          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]
+        ],
+        "current_player": 1,
+        "move_history": [
+          {"move_number": 1, "player": 1, "position": [7, 7], "timestamp": "2024-01-15T10:30:00Z"},
+          {"move_number": 2, "player": 2, "position": [7, 8], "timestamp": "2024-01-15T10:30:15Z"},
+          {"move_number": 3, "player": 1, "position": [6, 7], "timestamp": "2024-01-15T10:30:25Z"},
+          {"move_number": 4, "player": 2, "position": [7, 9], "timestamp": "2024-01-15T10:30:35Z"}
+        ],
+        "game_mode": "HUMAN_VS_AI",
+        "ai_difficulty": "medium",
+        "started_at": "2024-01-15T10:30:00Z",
+        "status": "in_progress",
+        "winner": null
+      },
+      
+      "api_responses": {
+        "new_game": {
+          "success": true,
+          "game_id": "550e8400-e29b-41d4-a716-446655440000",
+          "message": "New game created successfully"
+        },
+        "make_move": {
+          "success": true,
+          "board": "[[...]]",
+          "current_player": 2,
+          "game_over": false,
+          "winner": null,
+          "ai_move": {"x": 8, "y": 8}
+        },
+        "error": {
+          "success": false,
+          "error_code": "INVALID_MOVE",
+          "message": "Position already occupied"
+        }
+      }
+    }
+    ```
+```
